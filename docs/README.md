@@ -38,20 +38,15 @@ Finally, note that if you do not want to test either images or videos, then you 
 ### Pipeline
 
 Given an image
-![alt text][original]
-![alt text][gray]
-![alt text][blurred]
-![alt text][canny]
-![alt text][trimmed]
-![alt text][hough]
 
-[original] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png "Original Image"
-[gray] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Grayscale.png "Grayscale"
-[blurred] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Blurred.png "Blurred"
-[canny] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Canny.png "Canny"
-[trimmed] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Trimmed.png "Trimmed"
-[hough] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Hough.png "Hough"
-[filteredHough] https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/FilteredHough.png "Hough"
+![Original Image](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png)
+![Grayscle Image](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Grayscale.png)
+![blurred](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Blurred.png)
+![canny](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Canny.png)
+![trimmed](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Trimmed.png)
+![hough](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Hough.png)
+![filteredHough](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/FilteredHough.png)
+![lanes](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Lanes.png)
 
 ### Issues and Future Work
 At its core, this pipeline was developed to work on static images, that is, the identification of lanes at one point is time is completely independent from the identification of lanes at another point in time. Although this makes the code simple, this will clearly present a problem for stretches of road where the lane markings are either poorly visible or not present. In such circumstances, it would be preferable to somehow utilize the lanes identified in previous frames to determine the lane locations. For instance,
