@@ -1,2 +1,1 @@
-# cannyHoughLanes
-A pipeline for detecting lanes in still images and video using Canny edge detection and Hough line transforms
+# Please visit google.com for a description of this project and its documentation.
