@@ -1,9 +1,5 @@
-import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-import numpy as np
-import cv2, math, os
-import inspect
+import cv2, inspect, io, math, matplotlib, numpy, os, tqdm, urllib, zipfile
 
 '''
 This is a relatively simple project which uses Canny edge detection and Hough line transforms to detect traffic lanes in 
@@ -42,74 +38,58 @@ def gaussian_blur(img, kernel_size):
 
 def region_of_interest(img, vertices):
     """
-    Apply a mask to the image, converting all points in the image outside 
-    of the polygon defined by the vertices to "black".
+    Apply a mask to the image using a polygon with the specified vertices.
+    Specifically, all points in the image outside of the polygon are changed to "black".
     """
-    # Create a blank mask 
-    mask = np.zeros_like(img)
+    # Create a blank mask (that is, a black image). Using black is critical for the mask operation,
+    # otherwise, the comparison at the end of the function will not work
+    mask = numpy.zeros_like(img)
 
-    # defining a 3 channel or 1 channel color to fill the mask with depending on the input image
+    # Fill all of the pixels inside the polygon defined by "vertices" with a non-black color
     if len(img.shape) > 2:
         channel_count = img.shape[2]  # i.e. 3 or 4 depending on your image
         ignore_mask_color = (255,) * channel_count
     else:
         ignore_mask_color = 255
-
-    # filling pixels inside the polygon defined by "vertices" with the fill color
     cv2.fillPoly(mask, vertices, ignore_mask_color)
 
-    # returning the image only where mask pixels are nonzero
-    masked_image = cv2.bitwise_and(img, mask)
-    return masked_image
+    # Returning the image only where mask pixels are nonzero
+    return cv2.bitwise_and(img, mask)
 
 
 def draw_lines(img, lines=[], thickness=2):
     """
-    NOTE: this is the function you might want to use as a starting point once you want to
-    average/extrapolate the line segments you detect to map out the full
-    extent of the lane (going from the result shown in raw-lines-example.mp4
-    to that shown in P1_example.mp4).
-
-    Think about things like separating line segments by their
-    slope ((y2-y1)/(x2-x1)) to decide which segments are part of the left
-    line vs. the right line.  Then, you can average the position of each of
-    the lines and extrapolate to the top and bottom of the lane.
-
-    This function draws `lines` with `color` and `thickness`.
+    This function draws `lines` with the specified `thickness` using a rainbow of colors.
     Lines are drawn on the image inplace (mutates the image).
-    If you want to make the lines semi-transparent, think about combining
-    this function with the weighted_img() function below
+    If you want to make the lines semi-transparent, see <weighted_img>.
     """
     if isinstance(img, tuple):
         shape = img
-        img = np.zeros((shape[0], shape[1], 3), dtype=np.uint8)
-    colors = matplotlib.cm.rainbow(np.linspace(0, 1, len(lines)))
+        img = numpy.zeros((shape[0], shape[1], 3), dtype=numpy.uint8)
+    colors = matplotlib.cm.rainbow(numpy.linspace(0, 1, len(lines)))
     for color, line in zip(colors, lines):
         x1, y1, x2, y2 = line
-        cv2.line(img, (x1, y1), (x2, y2), 255 * np.array(color[0:3]), thickness)
+        cv2.line(img, (x1, y1), (x2, y2), 255 * numpy.array(color[0:3]), thickness)
     return img
 
 
 def hough_lines(img, rho, theta, threshold, min_line_len, max_line_gap):
-    return cv2.HoughLinesP(img, rho, theta, threshold, np.array([]), minLineLength=min_line_len,
+    '''
+    This function computes probalistic Hough lines using OpenCV's "HoughLinesP"
+    '''
+    return cv2.HoughLinesP(img, rho, theta, threshold, numpy.array([]), minLineLength=min_line_len,
                            maxLineGap=max_line_gap)
 
 
-# Python 3 has support for cool math symbols. NOTE: Does not work on Windows 10 with my Anaconda 3.6 distro
-
-def weighted_img(img, initial_img, alpha=0.8, beta=1., lam=0.):
+def weighted_img(img, img0, alpha=0.8, beta=1., lam=0.):
     """
-    `img` is the output of the hough_lines(), An image with lines drawn on it.
-    Should be a blank image (all black) with lines drawn on it.
+    This function overlays `img` on 'img0' using the following algorithm:
 
-    `initial_img` should be the image before any processing.
+    output = img0 * alpha + img * beta + lambda
 
-    The result image is computed as follows:
-
-    initial_img * alpha + img * beta + lambda
-    NOTE: initial_img and img must be the same shape!
+    NOTE: img0 and img must be the same shape!
     """
-    return cv2.addWeighted(initial_img, alpha, img, beta, lam)
+    return cv2.addWeighted(img0, alpha, img, beta, lam)
 
 
 ########################################
@@ -120,19 +100,18 @@ def weighted_img(img, initial_img, alpha=0.8, beta=1., lam=0.):
 class DetectionParameters(object):
     '''
 
-    This class encapsulates all of the parameters that are used. We do this so that everything is configurable in
-    one place
+    This class encapsulates most of the parameters that are used in the lane detection pipeline.
 
     :param rho: distance resolution in pixels of the Hough grid
     :param theta: angular resolution in radians of the Hough grid
     :param threshold: minimum number of votes (intersections in Hough grid cell)
     :param min_line_length: minimum number of pixels making up a line
     :param max_line_gap: maximum gap in pixels between connectable line segments
-    :param min_slope: when detecting lanes, we look for hough lines. However, we should reject horizontal lines.
-    This is the minimum absolute slope a line must have NOT to be rejected.
+    :param min_slope: when detecting lanes, we look for hough lines. However, we should reject horizontal lines since /
+        they are unlikely to be lanes. This is the minimum absolute slope a line must have NOT to be rejected.
     '''
 
-    def __init__(self, blur=5, canny_low=50, canny_high=150, rho=1, theta=1 * np.pi / 180, threshold=10,
+    def __init__(self, blur=5, canny_low=50, canny_high=150, rho=1, theta=1 * numpy.pi / 180, threshold=10,
                  min_line_length=20,
                  max_line_gap=2, min_slope=.3):
         self.blur = blur
@@ -143,7 +122,7 @@ class DetectionParameters(object):
         self.threshold = threshold
         self.min_line_length = min_line_length
         self.max_line_gap = max_line_gap
-        self.min_slope = min_slope
+        self.min_slope = abs(min_slope)
 
 
 def path_to_image(path):
@@ -151,7 +130,7 @@ def path_to_image(path):
     :param path: The path to an image
     :return: the image
     '''
-    return mpimg.imread(path)
+    return matplotlib.image.imread(path)
 
 
 def vertex(image, width_percent, height_percent):
@@ -199,30 +178,30 @@ def separate_lines(lines, params):
     data = list(zip(zip(slopes, intercepts), lengths))
 
     # Split the dataset into those with positive and negative slope
-    rightData = [si for si in data if si[0][0] > 0]
-    leftData = [si for si in data if si[0][0] <= 0]
+    right_data = [si for si in data if si[0][0] > 0]
+    left_data = [si for si in data if si[0][0] <= 0]
 
     # It might be a good idea to keep only the longest lines that we detected since short lines tend to be noise.
     # It you want to do that, fill in a positive number here. 0 means "select all".
     lines_to_keep = 0
-    rightData = np.sort(rightData, axis=0)[-lines_to_keep:]
-    leftData = np.sort(leftData, axis=0)[-lines_to_keep:]
+    right_data = numpy.sort(right_data, axis=0)[-lines_to_keep:]
+    left_data = numpy.sort(left_data, axis=0)[-lines_to_keep:]
 
     # Finally, computed the weighted mean of the slopes and intercepts
-    right, rightLen = zip(*rightData)
-    left, leftLen = zip(*leftData)
+    right, right_len = zip(*right_data)
+    left, left_len = zip(*left_data)
 
-    rightMean = np.average(right, axis=0, weights=rightLen)
-    leftMean = np.average(left, axis=0, weights=leftLen)
-    return (rightMean, leftMean)
+    right_mean = numpy.average(right, axis=0, weights=right_len)
+    left_mean = numpy.average(left, axis=0, weights=left_len)
+    return (right_mean, left_mean)
 
 
 def draw_lanes(image, lanes, color=[255, 0, 0], thickness=15):
     '''
-    This function draws the lanes on the specified image, where the lanes are specified as (slope,intercept) tuples.
+    This function draws the lanes on the specified image, where the lanes are specified as list of (slope,intercept) tuples.
     '''
     # We need the image height to calculate the intercept
-    image = np.array(image, copy=True)
+    image = numpy.array(image, copy=True)
     height = image.shape[0]
     y1 = int(round(height))
     y2 = int(round(0.6 * height))
@@ -235,6 +214,25 @@ def draw_lanes(image, lanes, color=[255, 0, 0], thickness=15):
 
 
 def detect_lanes(image, params, name='', verbose=False, processed_frame_path=None):
+    '''
+    This is the core lane detection algorithm, which detects lanes in a static image by
+
+    1. Converting the image to grayscale
+    2. Blurring the image to attenuate image artifacts and noise
+    3. Applying Canny edge detection
+    4. Applying a "region of interest map" to remove edges outside of a specified area
+    5. Computing the Hough lines
+    6. Removing the Hough lines which are vertical and those which are nearly horizontal (since these are unlikely to be lanes)
+    7. Separating lines into left and right by examining whether their slope is positive or negative
+    8. Computing the weighted average y-axis intercepts and slopes for the left and right lanes, where the weights are taken to be the line lengths.
+
+    :param image: Either a 3-channel color image or the path to such an image.
+    :param params: The DetectionParameters that should be used for lane detection.
+    :param name: The name of the frame. This is useful particularly when testing multiple images.
+    :param verbose: If true, then this will show all of the stages in the detection pipeline in one concise plot.
+    :param processed_frame_path: The path of where to save the processed frame plot. If this is None, then the plot is not saved.
+    :return: The processed image, with the lanes annotated.
+    '''
     # If the input is a string, we assume it is a path and convert it to an image.
     if isinstance(image, str):
         name = image
@@ -244,7 +242,7 @@ def detect_lanes(image, params, name='', verbose=False, processed_frame_path=Non
     grey = grayscale(image)
     blurred = gaussian_blur(grey, params.blur)
     canned = canny(blurred, params.canny_low, params.canny_high)
-    vertices = np.array([[vertex(canned, .05, 1), vertex(canned, .5, .58), vertex(canned, .95, 1)]])
+    vertices = numpy.array([[vertex(canned, .05, 1), vertex(canned, .5, .58), vertex(canned, .95, 1)]])
     trimmed = region_of_interest(canned, vertices)
     lines = hough_lines(trimmed, params.rho, params.theta, params.threshold, params.min_line_length,
                         params.max_line_gap)
@@ -252,62 +250,85 @@ def detect_lanes(image, params, name='', verbose=False, processed_frame_path=Non
     # Remove the extra dimension from the data to make processing easier
     lines = [line[0] for line in lines]
     hough = draw_lines(trimmed.shape, lines)
-    filtered_lines = filterLines(lines, params)
+    filtered_lines = filter_lines(lines, params)
     filtered_hough = draw_lines(trimmed.shape, filtered_lines)
-    lane_boundaries = separateLines(filtered_lines, params)
+    lane_boundaries = separate_lines(filtered_lines, params)
     lanes = draw_lanes(image, lane_boundaries)
+
+    # If you either want verbose output or if you want to save the processed frame pipeline, then we will generate the plot showing all of the steps in the pipeline.
     if verbose or (processed_frame_path is not None):
+        print("drawing")
         if False:
             plt.imshow(lanes, cmap='gray')
+            plt.axis('off')
         else:
+            composite = False
             images = [(image, 'Original'), (grey, 'Grayscale'), (blurred, 'Blurred'), (canned, 'Canny'),
-                      (trimmed, 'Trimmed'), (hough, 'Hough'), (filtered_hough, 'Filtered Hough'), (lanes, 'Lanes')]
+                      (trimmed, 'Trimmed'), (hough, 'Hough'), (filtered_hough, 'FilteredHough'), (lanes, 'Lanes')]
             n = math.floor(math.sqrt(len(images)))
-            for (c, img) in enumerate(images):
-                plt.subplot(n, math.ceil(len(images) / n), c + 1)
-                plt.imshow(img[0], cmap='gray')
-                plt.title(img[1])
-            plt.suptitle(name)
+            if composite:
+                for (c, img) in enumerate(images):
+                    plt.subplot(n, math.ceil(len(images) / n), c + 1)
+                    plt.imshow(img[0], cmap='gray')
+                    plt.axis('off')
+                    plt.title(img[1])
+                plt.suptitle(name)
+                if processed_frame_path is not None:
+                    plt.savefig(processed_frame_path, bbox_inches='tight', dpi=600)
+            else:
+                os.makedirs(processed_frame_path + "/", exist_ok=True)
+                for (c, img) in enumerate(images):
+                    plt.imshow(img[0], cmap='gray')
+                    plt.axis('off')
+                    plt.margins(0, 0)
+                    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+                    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                    if processed_frame_path is not None:
+                        plt.savefig(processed_frame_path + "/" + img[1] + ".png", bbox_inches='tight', pad_inches=0,
+                                    dpi=100)
         if verbose:
-            plt.show()
-        if processed_frame_path is not None:
-            plt.savefig(processed_frame_path, bbox_inches='tight', dpi=600)
+            plt.show(block=False)
     return lanes
 
 
-def process_image(image, count=None, processed_frames_dir=None, params = DetectionParameters()):
+def process_image(image, count=None, processed_frames_dir=None, params=DetectionParameters()):
     '''
-    This function uses the specified DetectionParameters to search for lanes in the specified image. 
-    
+    This function processes a single static image, returning a 3-channel processed color image as output using
+    the <detect_lanes> method.
     '''
-    # NOTE: The output you return should be a color image (3 channel) for processing video below
-    # you should return the final output (image where lines are drawn on lanes)
-    
     if count is not None and processed_frames_dir is not None:
         os.makedirs(processed_frames_dir, exist_ok=True)
         processed_frame_path = processed_frames_dir + 'frame' + str(count)
     else:
         processed_frame_path = None
-    return detectLanes(image, params, verbose=False, processed_frame_path=processed_frame_path)
+    return detect_lanes(image, params, processed_frame_path=processed_frame_path)
 
 
-def process_video(input_path, output_path, frame_processor, fps=30):
+def process_video(input_path, output_path, frame_processor=process_image, fps=None):
     '''
     This function processes the video at the specified input path, saving the processed video at the specified output path.
     Specifically, each frame will be processed using the frame processor, and the output video will be saved at the specified fps.
-    :param frameProcessor: a function which should take a frame as input, and returned the processed frame as output. If this function accepts more than one parameter, then the cumulative frame count will be passed as a second input.
+    :param frameProcessor: a function which should take a frame as input, and returned the processed frame as output. /
+    If this function accepts more than one parameter, then the cumulative frame count will be passed as a second input.
     '''
     input_video = cv2.VideoCapture(input_path)
     output_video = None
     count = 0
 
-    # Check whether the frame_processor takes one or two arguments. 
+    # Check whether the frame_processor takes one or two arguments.
     # If it takes two args, then we will pass it the frame count as the second arg
     if len(inspect.getfullargspec(frame_processor).args) > 1:
         pass_count = True
     else:
         pass_count = False
-        
+
+    # Set up the progress bar and grab the fps if one was not specified
+    frames = int(input_video.get(cv2.CAP_PROP_FRAME_COUNT))
+    progressbar = tqdm.tqdm(total=frames)
+    if fps is None:
+        fps = input_video.get(cv2.CAP_PROP_FPS)
+        print("Using " + str(fps) + "fps")
+
     # Now, for each frame of the video, run the frame processor and save the output in a new video
     while input_video.isOpened():
         success, frame = input_video.read()
@@ -317,7 +338,6 @@ def process_video(input_path, output_path, frame_processor, fps=30):
             fourcc = cv2.VideoWriter_fourcc(*'FMP4')
             output_video = cv2.VideoWriter(output_path, fourcc, fps, (frame.shape[1], frame.shape[0]))
         count += 1
-        print("frame: ", count)
         try:
             if pass_count:
                 output_video.write(frame_processor(frame, count))
@@ -325,6 +345,9 @@ def process_video(input_path, output_path, frame_processor, fps=30):
                 output_video.write(frame_processor(frame))
         except:
             output_video.write(frame)
+        progressbar.update()
+    progressbar.update(n=(frames - progressbar.n))
+    progressbar.close()
     cv2.destroyAllWindows()
     input_video.release()
     if output_video is not None:
@@ -334,25 +357,130 @@ def process_video(input_path, output_path, frame_processor, fps=30):
 def save_video_frames(input_path, output_path):
     '''
     This function takes the input path to a video, and then saves all of the video frames to the specified output path.
-    You will typically use this function if an algorithm is failing on a particular video frame, and you 
-    want to diagnose why. Specifically, in that case, you can save all of the video frames to file, and then 
-    repeatedly call your detection algorithm only on that single frame. 
+    You will typically use this function if an algorithm is failing on a particular video frame, and you
+    want to diagnose why. Specifically, in that case, you can save all of the video frames to file, and then
+    repeatedly call your detection algorithm only on that single frame.
+
+    Note: this function will create the output_path directory if it does not exist.
     '''
-    
-    # Make sure that the specified output directory already exists 
+
+    # Make sure that the specified output directory already exists
     os.makedirs(output_path, exist_ok=True)
 
-    # Open the video and save each of the frames 
-    input = cv2.VideoCapture(input_path)
+    # Open the video and save each of the frames
+    input_video = cv2.VideoCapture(input_path)
     count = 0
-    while input.isOpened():
-        success, frame = input.read()
+    while input_video.isOpened():
+        success, frame = input_video.read()
         if (not success) or (cv2.waitKey(10) & 0xFF == ord('q')):
             break
         count += 1
-        mpimg.imsave(output_path + 'frame' + str(count) + '.jpg', frame)
+        matplotlib.image.imsave(output_path + 'frame' + str(count) + '.jpg', frame)
     cv2.destroyAllWindows()
-    input.release()
+    input_video.release()
+
+
+def is_dir(dir):
+    ''' Determine whether the specified directory exists and is a directory. '''
+    return os.path.isdir(dir)
+
+
+def is_empty(dir):
+    '''
+    Determine whether the specified directory is empty. Note that you should check whether the directory exists before
+    this call.
+    '''
+    return not os.listdir(dir)
+
+
+def is_not_none_and_empty(dir):
+    return (dir is not None) and is_empty(dir)
+
+
+########################################
+#
+# Testing
+#
+########################################
+def test(image_dir="test_images/", video_dir="test_videos/", params=DetectionParameters()):
+    '''
+    Run the lane detection code on all of the images in the image directory and videos in the video directory.
+    If a directory is specified as None, then those tests will not be run. For instance:
+
+    To only test the detection on images, call "test( video_dir = None )"
+    To only test the detection on videos, call "test( image_dir = None )"
+
+    Note that if you specify a directory which turns out to be empty, we will populate it with images or videos from
+    https://github.com/mholzel/drive/files/1296126/data.zip
+
+    :return:
+    '''
+    # Depending on the project configuration, you may need to move to the directory of this script
+    os.chdir(os.path.dirname(__file__))
+
+    # # I would prefer not to package the images and videos in the repo, but I haven't got around to fixing this yet.
+    # # If either the image or video directory is not None and is empty, then we will download and unpack the standard test files
+    # if (not is_dir(image_dir) or is_not_none_and_empty(image_dir)) or (
+    #             not is_dir(video_dir) or is_not_none_and_empty(video_dir)):
+    #     with urllib.request.urlopen("https://github.com/mholzel/drive/files/1296126/data.zip") as url:
+    #         print("Start")
+    #         content = url.read()
+    #         print("content: ", content)
+    #         ior = io.StringIO(content)
+    #         print("io", ior)
+    #         zip = zipfile.ZipFile(ior)
+    #         print("zip", zip)
+    #         for name in zip.namelist():
+    #             print(name)
+    # return
+
+    # Run the tests for all of the test images if the directory was not specified as None
+    if image_dir is not None:
+
+        # Now apply lane detection to each test image, skipping directories
+        for image_path in os.listdir(image_dir):
+            if os.path.isdir(image_dir + image_path):
+                continue
+            processed_frame_path = image_dir + os.path.splitext(image_path)[0]
+            print(processed_frame_path)
+            detect_lanes(image_dir + image_path, params, processed_frame_path=processed_frame_path)
+
+    # Run the tests for all of the test videos if the directory was not specified as None
+    if video_dir is not None:
+
+        # Now we will work with video. Try to detect the lanes in each of the videos. The processed video will be
+        # saved in the following output directory
+        output_dir = video_dir + 'output/'
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Furthermore, you can optionally save the frames of the video as well as the processedFrames for each video
+        save_frames = False
+        output_frame_dir = video_dir + 'frames/'
+        save_processed_frames = False
+        output_processed_frame_dir = 'processed_frames/'
+
+        # Furthermore, optionally, you can save the frames of the video as well as the processedFrames for each video
+        for video in os.listdir(video_dir):
+
+            print(video)
+
+            # Define the path to the video we want to process, as well as where we should save the processed video
+            input_path = video_dir + video
+            output_path = output_dir + video
+
+            # It is sometimes also useful to save the video frames of the original video in case you want to test
+            # why individual frames are not giving the desired behavior
+            if save_frames:
+                save_video_frames(input_path, output_frame_dir + video + '/')
+
+            # If you want to save the individual processed frames, then you can specify a directory here.
+            # Otherwise, if you do not want to save the individual frames, then set this value to None.
+            if save_processed_frames:
+                processed_frames_dir = output_processed_frame_dir + video + '/'
+            else:
+                processed_frames_dir = None
+            process_video(input_path, output_path,
+                          lambda x, count: process_image(x, count=count, processed_frames_dir=processed_frames_dir))
 
 
 ########################################
@@ -361,42 +489,4 @@ def save_video_frames(input_path, output_path):
 #
 ########################################
 if __name__ == "__main__":
-
-    # Depending on the project configuration, you may need to move to the directory of this script
-    os.chdir(os.path.dirname(__file__))
-
-    # Define the directory where the test images live and test them.
-    dir = "test_images/"
-    params = DetectionParameters()
-    for imagePath in os.listdir(dir):
-        detectLanes(dir + imagePath, params, verbose=False)
-
-    # Now we will work with video. Try to detect the lanes in each of the videos.
-    # Furthermore, optionally, you can save the frames of the video as well as the processedFrames for each video
-    input_dir = "test_videos/"
-    output_dir = "test_videos_output/"
-    output_frame_dir = 'test_videos_frames/'  # Raw video frames
-    output_processed_frame_dir = 'test_videos_processed_frames/'  #
-    os.makedirs(output_dir, exist_ok=True)
-    save_frames = False
-    save_processed_frames = False
-    for video in os.listdir(input_dir):
-
-        print(video)
-
-        # Define the path to the video we want to process, as well as where we should save the processed video
-        input_path = input_dir + video
-        output_path = output_dir + video
-
-        # It is sometimes also useful to save the video frames of the original video in case you want to test
-        # why individual frames are not giving the desired behavior
-        if save_frames:
-            save_video_frames(input_path, output_frame_dir + video + '/')
-
-        # If you want to save the individual processed frames, then you can specify a directory here.
-        # Otherwise, if you do not want to save the individual frames, then set this value to None.
-        if save_processed_frames:
-            processedFramesDir = output_processed_frame_dir + video + '/'
-        else:
-            processedFramesDir = None
-        processVideo(input_path, output_path, lambda x, count: process_image(x, count=count, processedFramesDir=processedFramesDir))
+    test(video_dir = None)
