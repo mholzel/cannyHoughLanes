@@ -8,14 +8,14 @@ present the results. This project does NOT use machine learning techniques.
 ## Dependencies
 If you need help setting up dependencies, or would like to mirror the dependencies
 used to develop this code, read the README at
-https://github.com/mholzel/drive.
+[mholzel.github.io/drive/](https://mholzel.github.io/drive/).
 
 ### Quick-Start
 If you just want to see the core code of this project at work, then clone this repo and run
 
     python lanes.py
 
-This will download sample images and videos from https://github.com/mholzel/drive/files/1296126/data.zip and run the lane detection code.
+This will download sample images and videos from [this link](https://github.com/mholzel/drive/files/1296126/data.zip) and run the lane detection code.
 
 ---
 
@@ -24,7 +24,7 @@ The goal of this project is to develop a pipeline for traffic lane identificatio
 
 
 #### Test Data
-Sample images and videos are available at https://github.com/mholzel/drive/files/1296126/data.zip. You can either
+Sample images and videos are available at [github.com/mholzel/drive/files/1296126/data.zip](https://github.com/mholzel/drive/files/1296126/data.zip). You can either
 1. clone unzip  
 1. clone unzip  
 1. clone unzip  
