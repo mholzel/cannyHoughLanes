@@ -146,7 +146,7 @@ def vertex(image, width_percent, height_percent):
     return (round(width_percent * image.shape[1]), round(height_percent * image.shape[0]))
 
 
-def filter_lines(lines, params):
+def filter(lines, params):
     '''
     This function removes all of the vertical and nearly horizontal lines since they are unlikely to be lanes
     '''
@@ -160,7 +160,7 @@ def filter_lines(lines, params):
     return [sl[1] for (i, sl) in enumerate(zip(slopes, lines)) if abs(sl[0]) > params.min_slope]
 
 
-def separate_lines(lines, params):
+def separate(lines, params):
     '''
     The specified lines should be separable into left and right.
     We accomplish this using the following process:
@@ -196,7 +196,7 @@ def separate_lines(lines, params):
     return (right_mean, left_mean)
 
 
-def draw_lanes(image, lanes, color=[255, 0, 0], thickness=15):
+def draw(image, lanes, color=[255, 0, 0], thickness=15):
     '''
     This function draws the lanes on the specified image, where the lanes are specified as list of (slope,intercept) tuples.
     '''
@@ -213,7 +213,17 @@ def draw_lanes(image, lanes, color=[255, 0, 0], thickness=15):
     return image
 
 
-def detect_lanes(image, params, name='', verbose=False, processed_frame_path=None):
+def show(image, cmap='gray'):
+    '''
+    Display an image with not whitespace
+    '''
+    plt.imshow(image, cmap=cmap)
+    plt.axis('off')
+    plt.margins(0, 0)
+    plt.gca().xaxis.set_major_locator(plt.NullLocator())
+    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+
+def detect(image, params=DetectionParameters(), name='', verbose=False, processed_frame_path=None):
     '''
     This is the core lane detection algorithm, which detects lanes in a static image by
 
@@ -250,14 +260,11 @@ def detect_lanes(image, params, name='', verbose=False, processed_frame_path=Non
     # Remove the extra dimension from the data to make processing easier
     lines = [line[0] for line in lines]
     hough = draw_lines(trimmed.shape, lines)
-    filtered_lines = filter_lines(lines, params)
+    filtered_lines = filter(lines, params)
     filtered_hough = draw_lines(trimmed.shape, filtered_lines)
-    lane_boundaries = separate_lines(filtered_lines, params)
-    lanes = draw_lanes(image, lane_boundaries)
-
-    # If you either want verbose output or if you want to save the processed frame pipeline, then we will generate the plot showing all of the steps in the pipeline.
+    lane_boundaries = separate(filtered_lines, params)
+    lanes = draw(image, lane_boundaries)
     if verbose or (processed_frame_path is not None):
-        print("drawing")
         if False:
             plt.imshow(lanes, cmap='gray')
             plt.axis('off')
@@ -278,11 +285,7 @@ def detect_lanes(image, params, name='', verbose=False, processed_frame_path=Non
             else:
                 os.makedirs(processed_frame_path + "/", exist_ok=True)
                 for (c, img) in enumerate(images):
-                    plt.imshow(img[0], cmap='gray')
-                    plt.axis('off')
-                    plt.margins(0, 0)
-                    plt.gca().xaxis.set_major_locator(plt.NullLocator())
-                    plt.gca().yaxis.set_major_locator(plt.NullLocator())
+                    show(img[0])
                     if processed_frame_path is not None:
                         plt.savefig(processed_frame_path + "/" + img[1] + ".png", bbox_inches='tight', pad_inches=0,
                                     dpi=100)
@@ -294,14 +297,14 @@ def detect_lanes(image, params, name='', verbose=False, processed_frame_path=Non
 def process_image(image, count=None, processed_frames_dir=None, params=DetectionParameters()):
     '''
     This function processes a single static image, returning a 3-channel processed color image as output using
-    the <detect_lanes> method.
+    the <detect> method.
     '''
     if count is not None and processed_frames_dir is not None:
         os.makedirs(processed_frames_dir, exist_ok=True)
         processed_frame_path = processed_frames_dir + 'frame' + str(count)
     else:
         processed_frame_path = None
-    return detect_lanes(image, params, processed_frame_path=processed_frame_path)
+    return detect(image, params, verbose=False, processed_frame_path=processed_frame_path)
 
 
 def process_video(input_path, output_path, frame_processor=process_image, fps=None):
@@ -327,7 +330,6 @@ def process_video(input_path, output_path, frame_processor=process_image, fps=No
     progressbar = tqdm.tqdm(total=frames)
     if fps is None:
         fps = input_video.get(cv2.CAP_PROP_FPS)
-        print("Using " + str(fps) + "fps")
 
     # Now, for each frame of the video, run the frame processor and save the output in a new video
     while input_video.isOpened():
@@ -336,6 +338,9 @@ def process_video(input_path, output_path, frame_processor=process_image, fps=No
             break
         if output_video is None:
             fourcc = cv2.VideoWriter_fourcc(*'FMP4')
+            fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+            fourcc = cv2.VideoWriter_fourcc(*'X264')
+            fourcc = cv2.VideoWriter_fourcc('A', 'V', 'C', '1')
             output_video = cv2.VideoWriter(output_path, fourcc, fps, (frame.shape[1], frame.shape[0]))
         count += 1
         try:
@@ -443,7 +448,7 @@ def test(image_dir="test_images/", video_dir="test_videos/", params=DetectionPar
                 continue
             processed_frame_path = image_dir + os.path.splitext(image_path)[0]
             print(processed_frame_path)
-            detect_lanes(image_dir + image_path, params, processed_frame_path=processed_frame_path)
+            detect(image_dir + image_path, params, processed_frame_path=processed_frame_path)
 
     # Run the tests for all of the test videos if the directory was not specified as None
     if video_dir is not None:
@@ -482,11 +487,10 @@ def test(image_dir="test_images/", video_dir="test_videos/", params=DetectionPar
             process_video(input_path, output_path,
                           lambda x, count: process_image(x, count=count, processed_frames_dir=processed_frames_dir))
 
-
 ########################################
 #
 # Testing
 #
 ########################################
 if __name__ == "__main__":
-    test(video_dir = None)
+    test(image_dir=None)
