@@ -25,31 +25,30 @@ The goal of this project is to develop a pipeline for traffic lane identificatio
 
 Given a color image like
 
-![Original Image](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png" alt="Original Image" style="width: 100%;"/>  
 
 we use the following process to detect traffic lanes:
 
-1. Convert the image to grayscale:  
-![Grayscale Image](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Grayscale.png)
+1. Convert the image to grayscale:    
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Grayscale.png" alt="Grayscale Image" style="width: 100%;"/>
 
 1. Apply a Gaussian blur filter. Raw images (particularly jpgs) tend to have a lot of noise in them, which we should try to attenuate. Although we can't perfectly remove all noise artifacts, passing the image through a Gaussian blur filter  will attenuate such effects:  
-![blurred](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Blurred.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Blurred.png" alt="Blurred Image" style="width: 100%;"/>
 
 1. Use Canny edge detection to find edges. The lane markers should have a strong contrast with the background road (if the lane markers are clearly visible). Hence we can start the lane detection process by focusing on places in the image where we see a high contrast between adjacent pixels. A Canny filter locates such places:  
-![canny](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Canny.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Canny.png" alt="Canny Image" style="width: 100%;"/>
 
 1. As we can see in the previous image, the lane markers are not the only *edges* in an image. Anything in an image that produces a high contrast with the background might be picked up as an edge, such as the outline of another car. Hence we need to limit our search for edges to the places where we actually expect to see lane markers. In our case, this is the triangle connecting the image's bottom left, bottom right, and center pixels:   
-![trimmed](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Trimmed.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Trimmed.png" alt="Trimmed Image" style="width: 100%;"/>
 
 1. The Canny filter only highlights edges in an image for us by setting their pixel value to *white*. However, since we expect the lane markers  to be straight lines (at least in the near-field range), we want to extract lines from this image. The Hough line transform does exactly that, although we have to tune many parameters which define what constitutes a *line*. The following figure shows all of the detected Hough lines, where each line is represented by a different color:  
-![hough](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Hough.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Hough.png" alt="Hough Image" style="width: 100%;"/>
 
 1. Unfortunately, the Hough line transform isn't going to just return everything we want. Instead of long lines denoting the left and right lanes, it tends to leave us with many small lines, which we will later need to average to estimate the left and right lane boundary. Hence at this point, we need to filter out any Hough lines that are clearly noise. To us, this means excluding lines which are approximately horizontal. For instance, any line with an absolute slope less than 0.3 is probably not part of a lane marker, so we remove it. (Note that such erroneous lines tend to be short, so it may be hard to see the change between this step and the previous figure):  
-![filteredHough](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/FilteredHough.png)
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/FilteredHough.png" alt="Filtered Hough Image" style="width: 100%;"/>
 
 1. Finally, with our Hough line results filtered, we separate the lines into those which likely belong to the left and right lane by computing their slopes. Specifically, if we imagine the y-axis as increasing toward the top of the page, we can roughly say that lines with a positive slope are likely part of the left lane boundary, and those with a negative slope are likely part of the right lane boundary. Once we have made this separation, we compute the weighted average of the slopes and y-axis intercepts of the lines for each lane, where the averages are weighted by the line lengths. This leaves us with a single line denoting the left lane and a single line denoting the right lane:  
-![lanes](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Lanes.png)
-
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Lanes.png" alt="Annotated Image" style="width: 100%;"/>
 
 ### Testing
 Sample images and videos are packaged with this repo in the `test_images` and `test_videos` directories. You can run the test suite by either calling
@@ -71,11 +70,11 @@ Finally, note that if you do not want to test either images or videos, then you 
 ### Processing Images and Videos
 The core lane detection code is contained in the `lanes.detect` method, which takes an image and a set of `DetectionParameters` as inputs, and returns the processed image with annotated lanes as output. For instance, given the following image or its path:  
 
-![Original Image](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png)  
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Original.png" alt="Original Image" style="width: 100%;"/>
 
 the `lanes.detect` method returns the image:  
 
-![lanes](https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Lanes.png)  
+<img src="https://raw.githubusercontent.com/mholzel/cannyHoughLanes/master/test_images/solidWhiteCurve/Lanes.png" alt="Annotated Image" style="width: 100%;"/>
 
 Note that we are displaying the images here, but the detect method does not automatically show them, it simply returns the raw data.
 
@@ -87,7 +86,7 @@ Furthermore, note that since the `lanes.detect` method is designed to work on a 
 </video>
 
 
-the method `process_detect` produces the following output when called with all of the default arguments:
+the method `process_video` produces the following output when called with all of the default arguments:
 
 
 <video width="100%" controls>
